@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/ysugimoto/falco/ast"
 	"github.com/ysugimoto/falco/interpreter/context"
 	"github.com/ysugimoto/falco/interpreter/limitations"
 	"github.com/ysugimoto/falco/interpreter/value"
@@ -116,19 +117,19 @@ func (v *ErrorScopeVariables) Get(s context.Scope, name string) (value.Value, er
 		if v.ctx.Backend == nil {
 			return &value.Integer{Value: 0}, nil
 		}
-		var port int64
 		for _, p := range v.ctx.Backend.Value.Properties {
 			if p.Key.Value != PORT {
 				continue
 			}
-			n, err := strconv.ParseInt(p.Value.String(), 10, 64)
-			if err != nil {
-				return value.Null, errors.WithStack(err)
+			if s, ok := p.Value.(*ast.String); ok {
+				n, err := strconv.ParseInt(s.Value, 10, 64)
+				if err != nil {
+					return value.Null, errors.WithStack(err)
+				}
+				return &value.Integer{Value: n}, nil
 			}
-			port = n
-			break
 		}
-		return &value.Integer{Value: port}, nil
+		return &value.Integer{Value: 0}, nil
 
 	case REQ_ESI:
 		return v.ctx.EnableSSI, nil

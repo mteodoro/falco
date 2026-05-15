@@ -665,3 +665,17 @@ func TestIsNotSetSeriesCheck(t *testing.T) {
 		})
 	}
 }
+
+// https://www.fastly.com/documentation/reference/vcl/variables/miscellaneous/req-backend-port/
+func TestReqBackendPort(t *testing.T) {
+	vcl := `
+sub vcl_deliver {
+	if (req.backend.port > 0) {
+		set resp.http.X-Has-Port = "yes";
+	}
+}
+`
+	assertInterpreter(t, vcl, context.DeliverScope, map[string]value.Value{
+		"resp.http.X-Has-Port": &value.String{Value: "yes"},
+	}, false)
+}
