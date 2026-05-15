@@ -161,6 +161,41 @@ func TestFunctionSubroutine(t *testing.T) {
 	}
 }
 
+// String literals passed as function arguments should not be treated as
+// literals inside the function body.
+func TestFunctionStringParameterLiteralFlag(t *testing.T) {
+	// https://fiddle.fastly.dev/fiddle/40cdf7e5
+	t.Run("Regex match operator accepts function STRING parameter", func(t *testing.T) {
+		vcl := `sub is_numeric(STRING var.input) BOOL {
+				if (var.input ~ "^[0-9]+$") {
+					return true;
+				}
+				return false;
+			}
+
+			sub vcl_recv {
+				set req.http.X-Result = is_numeric("1000");
+			}
+			`
+		assertInterpreter(t, vcl, context.RecvScope, map[string]value.Value{
+			"req.http.X-Result": &value.String{Value: "1"},
+		}, false)
+	})
+
+	// https://fiddle.fastly.dev/fiddle/71193db1
+	t.Run("regsub rejects function STRING parameter as pattern", func(t *testing.T) {
+		vcl := `sub my_replace(STRING var.pattern, STRING var.replacement) STRING {
+				return regsub("hello world", var.pattern, var.replacement);
+			}
+
+			sub vcl_recv {
+				set req.http.X-Result = my_replace("world", "earth");
+			}
+			`
+		assertInterpreter(t, vcl, context.RecvScope, nil, true)
+	})
+}
+
 func TestMaxCallStackExceeded(t *testing.T) {
 	tests := []struct {
 		name string

@@ -354,6 +354,13 @@ func (i *Interpreter) validateAndSetParameters(sub *ast.SubroutineDeclaration, a
 				arg.Type(),
 			)
 		}
+		// Function parameters are variables, not literals. Without this,
+		// a string literal argument like my_func("hello") retains
+		// Literal=true, causing the ~ operator to incorrectly reject
+		// it and regsub to incorrectly accept it as a pattern.
+		if str, ok := converted.(*value.String); ok {
+			str.Literal = false
+		}
 		i.localVars[param.Name.Value] = converted
 	}
 
