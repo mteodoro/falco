@@ -38,6 +38,9 @@ func (v *LogScopeVariables) Get(s context.Scope, name string) (value.Value, erro
 
 	switch name {
 	case BEREQ_BODY_BYTES_WRITTEN:
+		if bereq == nil || bereq.Body == nil {
+			return &value.Integer{Value: 0}, nil
+		}
 		var buf bytes.Buffer
 		if _, err := buf.ReadFrom(bereq.Body); err != nil {
 			return value.Null, errors.WithStack(err)
@@ -52,6 +55,9 @@ func (v *LogScopeVariables) Get(s context.Scope, name string) (value.Value, erro
 		return &value.Integer{Value: 0}, nil
 
 	case BEREQ_HEADER_BYTES_WRITTEN:
+		if bereq == nil {
+			return &value.Integer{Value: 0}, nil
+		}
 		var headerBytes int64
 		// FIXME: Do we need to include total byte header LF bytes?
 		for k, v := range bereq.Header {
@@ -170,6 +176,9 @@ func (v *LogScopeVariables) Get(s context.Scope, name string) (value.Value, erro
 		}
 		return &value.Integer{Value: port}, nil
 	case REQ_BODY_BYTES_READ:
+		if req.Body == nil {
+			return &value.Integer{Value: 0}, nil
+		}
 		var buf bytes.Buffer
 		n, err := buf.ReadFrom(req.Body)
 		if err != nil {
@@ -184,13 +193,15 @@ func (v *LogScopeVariables) Get(s context.Scope, name string) (value.Value, erro
 			// add ":" character that header separator character
 			readBytes += int64(len(k) + 1 + len(strings.Join(v, ";")))
 		}
-		var buf bytes.Buffer
-		n, err := buf.ReadFrom(req.Body)
-		if err != nil {
-			return value.Null, errors.WithStack(err)
+		if req.Body != nil {
+			var buf bytes.Buffer
+			n, err := buf.ReadFrom(req.Body)
+			if err != nil {
+				return value.Null, errors.WithStack(err)
+			}
+			req.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+			readBytes += n
 		}
-		req.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
-		readBytes += n
 		return &value.Integer{Value: readBytes}, nil
 	// Digest ratio will return fixed value if not override
 	case REQ_DIGEST_RATIO:
@@ -220,8 +231,14 @@ func (v *LogScopeVariables) Get(s context.Scope, name string) (value.Value, erro
 	case RESP_IS_LOCALLY_GENERATED:
 		return v.ctx.IsLocallyGenerated, nil
 	case RESP_PROTO:
+		if v.ctx.Response == nil {
+			return &value.String{Value: ""}, nil
+		}
 		return &value.String{Value: v.ctx.Response.Proto}, nil
 	case RESP_RESPONSE:
+		if v.ctx.Response == nil || v.ctx.Response.Body == nil {
+			return &value.String{Value: ""}, nil
+		}
 		var buf bytes.Buffer
 		if _, err := buf.ReadFrom(v.ctx.Response.Body); err != nil {
 			return value.Null, errors.WithStack(err)
@@ -229,6 +246,9 @@ func (v *LogScopeVariables) Get(s context.Scope, name string) (value.Value, erro
 		v.ctx.Response.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
 		return &value.String{Value: buf.String()}, nil
 	case RESP_STATUS:
+		if v.ctx.Response == nil {
+			return &value.Integer{Value: 0}, nil
+		}
 		return &value.Integer{Value: int64(v.ctx.Response.StatusCode)}, nil
 
 	case TIME_END:
@@ -411,11 +431,15 @@ func (v *LogScopeVariables) Get(s context.Scope, name string) (value.Value, erro
 func (v *LogScopeVariables) getFromRegex(name string) (value.Value, error) {
 	// HTTP response header matching
 	if match := responseHttpHeaderRegex.FindStringSubmatch(name); match != nil {
-		return &value.String{
-			Value: v.ctx.Response.Header.Get(match[1]),
-		}, nil
+		if v.ctx.Response == nil {
+			return &value.String{IsNotSet: true}, nil
+		}
+		return getResponseHeaderValue(v.ctx.Response, match[1]), nil
 	}
 	if match := backendRequestHttpHeaderRegex.FindStringSubmatch(name); match != nil {
+		if v.ctx.BackendRequest == nil {
+			return &value.String{IsNotSet: true}, nil
+		}
 		return &value.String{
 			Value: v.ctx.BackendRequest.Header.Get(match[1]),
 		}, nil
@@ -451,17 +475,28 @@ func (v *LogScopeVariables) Set(s context.Scope, name, operator string, val valu
 		}
 		return nil
 	case RESP_RESPONSE:
-		var buf bytes.Buffer
-		if _, err := buf.ReadFrom(v.ctx.Response.Body); err != nil {
-			return errors.WithStack(err)
+		if v.ctx.Response == nil {
+			return nil
 		}
-		left := &value.String{Value: buf.String()}
+		var bodyStr string
+		if v.ctx.Response.Body != nil {
+			var buf bytes.Buffer
+			if _, err := buf.ReadFrom(v.ctx.Response.Body); err != nil {
+				return errors.WithStack(err)
+			}
+			bodyStr = buf.String()
+			v.ctx.Response.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+		}
+		left := &value.String{Value: bodyStr}
 		if err := doAssign(left, operator, val); err != nil {
 			return errors.WithStack(err)
 		}
 		v.ctx.Response.Body = io.NopCloser(strings.NewReader(left.Value))
 		return nil
 	case RESP_STATUS:
+		if v.ctx.Response == nil {
+			return nil
+		}
 		left := &value.Integer{Value: int64(v.ctx.Response.StatusCode)}
 		if err := doAssign(left, operator, val); err != nil {
 			return errors.WithStack(err)
@@ -486,6 +521,9 @@ func (v *LogScopeVariables) Set(s context.Scope, name, operator string, val valu
 		if err := limitations.CheckProtectedHeader(match[1]); err != nil {
 			return errors.WithStack(err)
 		}
+		if v.ctx.Response == nil {
+			return nil
+		}
 		v.ctx.Response.Header.Set(match[1], val.String())
 		return nil
 	}
@@ -497,14 +535,16 @@ func (v *LogScopeVariables) Set(s context.Scope, name, operator string, val valu
 func (v *LogScopeVariables) Add(s context.Scope, name string, val value.Value) error {
 	// Add statement could be use only for HTTP header
 	match := responseHttpHeaderRegex.FindStringSubmatch(name)
-	if match != nil {
-		// Nothing values to be enable to add in PASS, pass to base
+	if match == nil {
+		// Nothing values to be enable to add in LOG, pass to base
 		return v.base.Add(s, name, val)
 	}
 	if err := limitations.CheckProtectedHeader(match[1]); err != nil {
 		return errors.WithStack(err)
 	}
-
+	if v.ctx.Response == nil {
+		return nil
+	}
 	v.ctx.Response.Header.Add(match[1], val.String())
 	return nil
 }
@@ -512,11 +552,14 @@ func (v *LogScopeVariables) Add(s context.Scope, name string, val value.Value) e
 func (v *LogScopeVariables) Unset(s context.Scope, name string) error {
 	match := responseHttpHeaderRegex.FindStringSubmatch(name)
 	if match == nil {
-		// Nothing values to be enable to unset in PASS, pass to base
+		// Nothing values to be enable to unset in LOG, pass to base
 		return v.base.Unset(s, name)
 	}
 	if err := limitations.CheckProtectedHeader(match[1]); err != nil {
 		return errors.WithStack(err)
+	}
+	if v.ctx.Response == nil {
+		return nil
 	}
 	v.ctx.Response.Header.Del(match[1])
 	return nil
