@@ -20,6 +20,7 @@ import (
 	"github.com/avct/uasurfer"
 	"github.com/pkg/errors"
 	"github.com/rs/xid"
+	"github.com/ysugimoto/falco/ast"
 	"github.com/ysugimoto/falco/interpreter/context"
 	"github.com/ysugimoto/falco/interpreter/exception"
 	"github.com/ysugimoto/falco/interpreter/limitations"
@@ -198,6 +199,26 @@ func (v *AllScopeVariables) Get(s context.Scope, name string) (value.Value, erro
 		}
 		// Undocumented variable, value can be supplied via testing override.
 		return &value.String{}, nil
+
+	case BERESP_BACKEND_HOST:
+		if v.ctx.Backend == nil {
+			return &value.String{Value: ""}, nil
+		}
+		for _, p := range v.ctx.Backend.Value.Properties {
+			if p.Key.Value == "host" {
+				if s, ok := p.Value.(*ast.String); ok {
+					return &value.String{Value: s.Value}, nil
+				}
+			}
+		}
+		return &value.String{Value: ""}, nil
+	case BERESP_BACKEND_IP:
+		return &value.String{Value: ""}, nil
+	case BERESP_BACKEND_NAME:
+		if v.ctx.Backend == nil {
+			return &value.String{Value: ""}, nil
+		}
+		return &value.String{Value: v.ctx.Backend.Value.Name.Value}, nil
 
 	// Backend is always healthy on simulator
 	case REQ_BACKEND_HEALTHY:

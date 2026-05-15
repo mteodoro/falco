@@ -594,13 +594,23 @@ func predefinedVariables() Variables {
 								Reference: "https://developer.fastly.com/reference/vcl/variables/backend-connection/beresp-backend-alternate-ips/",
 							},
 						},
+						"host": {
+							Items: map[string]*Object{},
+							Value: &Accessor{
+								Get:       types.StringType,
+								Set:       types.NeverType,
+								Unset:     false,
+								Scopes:    FETCH | ERROR | DELIVER | LOG,
+								Reference: "https://developer.fastly.com/reference/vcl/variables/backend-response/beresp-backend-host/",
+							},
+						},
 						"ip": {
 							Items: map[string]*Object{},
 							Value: &Accessor{
 								Get:       types.IPType,
 								Set:       types.NeverType,
 								Unset:     false,
-								Scopes:    FETCH,
+								Scopes:    FETCH | ERROR | DELIVER | LOG,
 								Reference: "https://developer.fastly.com/reference/vcl/variables/backend-connection/beresp-backend-ip/",
 							},
 						},
@@ -610,7 +620,7 @@ func predefinedVariables() Variables {
 								Get:       types.StringType,
 								Set:       types.NeverType,
 								Unset:     false,
-								Scopes:    FETCH,
+								Scopes:    FETCH | ERROR | DELIVER | LOG,
 								Reference: "https://developer.fastly.com/reference/vcl/variables/backend-response/beresp-backend-name/",
 							},
 						},
