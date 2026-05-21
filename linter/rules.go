@@ -52,6 +52,7 @@ const (
 	ADD_STATEMENT_SYNTAX                 = "add-statement/syntax"
 	CALL_STATEMENT_SYNTAX                = "call-statement/syntax"
 	CALL_STATEMENT_SUBROUTINE_NOTFOUND   = "call-statement/subroutine-notfound"
+	CALL_STATEMENT_CALL_BEFORE_DEFINITION = "call-statement/call-before-definition"
 	ERROR_STATEMENT_SCOPE                = "error-statement/scope"
 	ERROR_STATEMENT_CODE                 = "error-statement/code"
 	SYNTHETIC_STATEMENT_SCOPE            = "synthetic-statement/scope"

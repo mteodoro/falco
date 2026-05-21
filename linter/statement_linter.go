@@ -409,12 +409,15 @@ func (l *Linter) lintAddStatement(stmt *ast.AddStatement, ctx *context.Context) 
 }
 
 func (l *Linter) lintCallStatement(stmt *ast.CallStatement, ctx *context.Context) types.Type {
-	// Note that this linter analyze up to down,
-	// so all call target subroutine must be defined before call it.
 	if s, ok := ctx.Subroutines[stmt.Subroutine.Value]; !ok {
 		l.Error(UndefinedSubroutine(stmt.GetMeta(), stmt.Subroutine.Value).Match(CALL_STATEMENT_SUBROUTINE_NOTFOUND))
 	} else {
 		s.IsUsed = true
+		callToken := stmt.GetMeta().Token
+		declToken := s.Decl.GetMeta().Token
+		if callToken.File == declToken.File && callToken.Line < declToken.Line {
+			l.Error(SubroutineCallBeforeDefinition(stmt.GetMeta(), stmt.Subroutine.Value).Match(CALL_STATEMENT_CALL_BEFORE_DEFINITION))
+		}
 
 		params := s.Decl.Parameters
 		args := stmt.Arguments
