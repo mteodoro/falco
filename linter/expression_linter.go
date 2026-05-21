@@ -360,6 +360,12 @@ func (l *Linter) lintIfExpression(exp *ast.IfExpression, ctx *context.Context) t
 func (l *Linter) lintFunctionCallExpression(exp *ast.FunctionCallExpression, ctx *context.Context) types.Type {
 	// Check if this is a user-defined function subroutine (with return type)
 	if sub, ok := ctx.Subroutines[exp.Function.Value]; ok && sub.Decl.ReturnType != nil {
+		callToken := exp.Function.GetMeta().Token
+		declToken := sub.Decl.GetMeta().Token
+		if callToken.File == declToken.File && callToken.Line < declToken.Line {
+			l.Error(SubroutineCallBeforeDefinition(exp.Function.GetMeta(), exp.Function.Value).Match(CALL_STATEMENT_CALL_BEFORE_DEFINITION))
+		}
+
 		params := sub.Decl.Parameters
 		args := exp.Arguments
 
