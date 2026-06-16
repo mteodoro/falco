@@ -497,8 +497,8 @@ func (v *LogScopeVariables) Set(s context.Scope, name, operator string, val valu
 func (v *LogScopeVariables) Add(s context.Scope, name string, val value.Value) error {
 	// Add statement could be use only for HTTP header
 	match := responseHttpHeaderRegex.FindStringSubmatch(name)
-	if match != nil {
-		// Nothing values to be enable to add in PASS, pass to base
+	if match == nil {
+		// Only response headers can be added in LOG; pass anything else to base
 		return v.base.Add(s, name, val)
 	}
 	if err := limitations.CheckProtectedHeader(match[1]); err != nil {
@@ -512,7 +512,7 @@ func (v *LogScopeVariables) Add(s context.Scope, name string, val value.Value) e
 func (v *LogScopeVariables) Unset(s context.Scope, name string) error {
 	match := responseHttpHeaderRegex.FindStringSubmatch(name)
 	if match == nil {
-		// Nothing values to be enable to unset in PASS, pass to base
+		// Only response headers can be unset in LOG; pass anything else to base
 		return v.base.Unset(s, name)
 	}
 	if err := limitations.CheckProtectedHeader(match[1]); err != nil {
