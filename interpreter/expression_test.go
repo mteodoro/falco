@@ -710,3 +710,38 @@ func TestIsNotSetSeriesCheck(t *testing.T) {
 		})
 	}
 }
+
+func TestBerespBackendVariables(t *testing.T) {
+	tests := []struct {
+		name       string
+		vcl        string
+		assertions map[string]value.Value
+	}{
+		{
+			// https://developer.fastly.com/reference/vcl/variables/backend-response/beresp-backend-host/
+			name: "beresp.backend.host is readable in vcl_deliver",
+			vcl: `sub vcl_deliver {
+				set resp.http.X-Backend-Host = beresp.backend.host;
+			}`,
+			assertions: map[string]value.Value{
+				"resp.http.X-Backend-Host": &value.String{Value: "127.0.0.1"},
+			},
+		},
+		{
+			// https://developer.fastly.com/reference/vcl/variables/backend-response/beresp-backend-name/
+			name: "beresp.backend.name is readable in vcl_deliver",
+			vcl: `sub vcl_deliver {
+				set resp.http.X-Backend-Name = beresp.backend.name;
+			}`,
+			assertions: map[string]value.Value{
+				"resp.http.X-Backend-Name": &value.String{Value: "example"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertInterpreter(t, tt.vcl, context.DeliverScope, tt.assertions, false)
+		})
+	}
+}
