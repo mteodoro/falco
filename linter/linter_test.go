@@ -27,7 +27,7 @@ var testConfig = &config.LinterConfig{
 		"returns_one":        {"recv"},
 		"custom_sub":         {"recv"},
 		"test_sub":           {"recv"},
-		"hoisted_subroutine": {"recv"},
+		"set_custom_headers": {"recv"},
 		"returns_true":       {"recv"},
 		"get_bool":           {"recv"},
 	},
@@ -407,17 +407,66 @@ sub vcl_fetch {
 	})
 }
 
-func TestSubroutineHoisting(t *testing.T) {
-	t.Run("pass", func(t *testing.T) {
+func TestCallBeforeDefinition(t *testing.T) {
+	t.Run("error: call before definition", func(t *testing.T) {
 		input := `
 sub vcl_recv {
 	#FASTLY recv
-	call hoisted_subroutine;
+	call set_custom_headers;
 	return(lookup);
 }
 
-sub hoisted_subroutine {
-	set req.http.X-Subrountine-Hoisted = "yes";
+sub set_custom_headers {
+	set req.http.X-Custom = "yes";
+}
+`
+		assertError(t, input)
+	})
+
+	t.Run("pass: call after definition", func(t *testing.T) {
+		input := `
+sub set_custom_headers {
+	set req.http.X-Custom = "yes";
+}
+
+sub vcl_recv {
+	#FASTLY recv
+	call set_custom_headers;
+	return(lookup);
+}
+`
+		assertNoError(t, input)
+	})
+
+	t.Run("error: functional call before definition", func(t *testing.T) {
+		input := `
+sub vcl_recv {
+	#FASTLY recv
+	if (is_local()) {
+		set req.http.X-Local = "yes";
+	}
+	return(lookup);
+}
+
+sub is_local BOOL {
+	return req.http.X-Forwarded-For ~ "^127\.";
+}
+`
+		assertError(t, input)
+	})
+
+	t.Run("pass: functional call after definition", func(t *testing.T) {
+		input := `
+sub is_local BOOL {
+	return req.http.X-Forwarded-For ~ "^127\.";
+}
+
+sub vcl_recv {
+	#FASTLY recv
+	if (is_local()) {
+		set req.http.X-Local = "yes";
+	}
+	return(lookup);
 }
 `
 		assertNoError(t, input)

@@ -116,6 +116,14 @@ func UndefinedSubroutine(m *ast.Meta, name string) *LintError {
 	}
 }
 
+func SubroutineCallBeforeDefinition(m *ast.Meta, name string) *LintError {
+	return &LintError{
+		Severity: ERROR,
+		Token:    m.Token,
+		Message:  fmt.Sprintf(`Subroutine "%s" is called before its definition`, name),
+	}
+}
+
 func InvalidOperation(m *ast.Meta, name, operation string) *LintError {
 	return &LintError{
 		Severity: ERROR,
